@@ -1,0 +1,14 @@
+
+project system/core/
+diff --git a/system/core/rootdir/init.rc b/system/core/rootdir/init.rc
+index 466fd70..01891a5 100644
+--- a/system/core/rootdir/init.rc
++++ b/system/core/rootdir/init.rc
+@@ -10,6 +10,7 @@ import /init.${ro.hardware}.rc
+ import /init.usb.configfs.rc
+ import /init.${ro.zygote}.rc
+ import /init.trace.rc
++import /init.vboxsf.rc
+ 
+ on early-init
+     # Set init and its forked children's oom_adj.
