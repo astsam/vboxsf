@@ -1,0 +1,3 @@
+service vboxsf /system/bin/sh /system/bin/vboxsf.sh
+	class late_start
+	oneshot
