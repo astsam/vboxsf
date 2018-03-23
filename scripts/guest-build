@@ -30,7 +30,7 @@ create_tar_gz() {
 	guest_name=`basename $1`
 	archive_name=$work_dir/$guest_name-$2
 
-	echo -e "vboxsf.ko\nvboxvideo.ko\nvboxguest.ko\n$script_dir/../init.vboxsf.rc\n$script_dir/../vboxsf.sh\n$script_dir/../scripts/inst" | \
+	echo -e "vboxsf.ko\nvboxvideo.ko\nvboxguest.ko\n$script_dir/../src/init.vboxsf.rc\n$script_dir/../src/vboxsf.sh\n$script_dir/../scripts/inst" | \
 		cpio -o --quiet --owner=0:0 --no-absolute-filenames -O $archive_name.tar -H tar 
 
 	if [ -f $archive_name.tar ]; then 
@@ -46,16 +46,6 @@ create_tar_gz() {
 	fi
 	tar xfz $archive_name.tar.gz -C $temp_dir
 	$script_dir/../makeself/makeself.sh  $temp_dir $work_dir/$guest_name-android-$2.run "Android VirtualBox Guest Additions" scripts/inst
-	rm -rf $temp_dir
-
-	# create iso image with the self extracting archive
-	temp_dir=`mktemp -d -p "$work_dir"`
-	if [[ ! "$temp_dir" || ! -d "$temp_dir" ]]; then
-		echo "Could not create temp dir"
-  		return
-	fi
-	cp $work_dir/$guest_name-android-$2.run $temp_dir
-	genisoimage -J -R -o $work_dir/$guest_name-android-$2.iso $temp_dir
 	rm -rf $temp_dir
 }
 
@@ -83,22 +73,30 @@ build_guest() {
 # $2 - vbox arch:    x86, amd64
 build_all_guests() {
 	local kernel_arch_dir
+	local mount_vboxsf
+
 	kernel_arch_dir=$android_product_dir/$1
+	mount_vboxsf=$kernel_arch_dir/system/bin/mount.vboxsf
 
 	if [ ! -d $kernel_arch_dir ]; then
-		echo "Android_x86 installation has no properly build kernel for $1 arch, skipping"
+		echo "Android_x86 installation has no kernel built for $1 arch, skipping"
 		return
 	fi
 
 	for g in $guests; do
 		build_guest $g $2 $kernel_arch_dir/$kernel_out_dir
-#		if [ -f $g/Makefile ]; then
-#			echo "Building $g ..."
-#			cd $g 
-#			make BUILD_TARGET_ARCH=$2 KERN_DIR=$kernel_src_dir KERN_VER=$kver O=$kernel_arch_dir/$kernel_out_dir
-#			cd $cur_dir
-#		fi
 	done
+
+	# create iso image with the self extracting archives
+	temp_dir=`mktemp -d -p "$work_dir"`
+	if [[ ! "$temp_dir" || ! -d "$temp_dir" ]]; then
+		echo "Could not create temp dir"
+  		return
+	fi
+	cp $work_dir/vboxguest-*-android-*.run $temp_dir
+	genisoimage -J -R -o $work_dir/VBoxGuestAdditionsAndroid.iso $temp_dir
+	rm -rf $temp_dir
+
 }
 
 
@@ -128,5 +126,4 @@ fi
 
 build_all_guests x86 x86
 build_all_guests x86_64 amd64
-
 

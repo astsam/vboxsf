@@ -7,7 +7,7 @@ file_copy() {
 }
 
 loaded=`lsmod |grep vboxguest`
-if [ x$loaded = x ]; then
+if [ "x$loaded" = x ]; then
 	echo "Testing driver compatability with the kernel `uname -r`..."
 	insmod vboxguest.ko || echo "Error: kernel version mismatch, rebuild guest drivers"
 fi
@@ -22,7 +22,7 @@ if [ -d $mod_dir ]; then
 	if [ -f $modules_dir/modules.dep ]; then
 		modules_dep=$modules_dir/modules.dep
 		vbox_dep=`grep vboxguest $modules_dep` 
-		if [ x$vbox_dep = x ]; then
+		if [ "x$vbox_dep" = x ]; then
 			echo "extra/vboxsf.ko: extra/vboxguest.ko" >> $modules_dep
 			echo "extra/vboxvideo.ko: extra/vboxguest.ko" >> $modules_dep
 			echo "extra/vboxguest.ko:" >> $modules_dep
@@ -32,13 +32,17 @@ else
 	echo "Error: no directory for guest drivers"
 fi
 
+cd src
+
 if [ -d /system/etc/init ]; then
 	file_copy init.vboxsf.rc /system/etc/init/ root.root 0644
 else
 	echo "Error: initrd must be rebuild"
 fi
-
 file_copy vboxsf.sh /system/bin/ root.root 0755
+
+cd ..
+
 
 if [ -f mount.vboxsf ]; then
 	file_copy mount.vboxsf /system/bin/ root.root 0755
