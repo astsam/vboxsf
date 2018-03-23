@@ -2,10 +2,10 @@
 Utility for Android to mount VirtualBox shared folders 
 ## Theory
 To access a shared folder, a guest OS must have:
-1. The driver vboxsf from guest additions (coming soon, see https://github.com/coyun/android-virtualbox/issues/18).
+1. The `vboxsf` and `vboxguest` drivers from guest additions.
 2. Utility (mount.vboxsf) to mount shared folders. Sources are available on the http://www.virtualbox.org.
-The `src` directory contains a port of the mount.vboxsf utility for Android.
-3. Some glue to mount shared folders on boot. For marshmallow this can be done by patching the init.rc script. Shared folders will be mount at /mnt/media_rw/vboxsf directory on a guest.
+The `src` directory of this project contains a port of the mount.vboxsf utility for Android.
+3. Some glue to mount shared folders on boot. For marshmallow this can be done by patching the init.rc script. The `vboxsf.sh` script mounts shared folders at the `/mnt/media_rw/vboxsf` directory on a guest.
 
 ## Prerequisits
 1. Download android_x86 sources from http://www.android_x86.org.
