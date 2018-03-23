@@ -1,0 +1,53 @@
+#!/bin/bash
+
+guest_iso=$1
+work_dir=work
+# sources for x86 and x64 are the same, use one of them
+guest_tar=VBoxGuestAdditions-amd64.tar.bz2
+
+usage() {
+	echo "Usage: guest-extract <VBoxGuestAdditions.iso>"
+	echo "The utility extracts guest drivers sources from VirtualBox guest additions iso image."
+	echo "If argument is ommited the utility tries to find locally available iso image."
+	exit 1
+}
+
+check=`which 7z`
+if [ x$check = x ]; then
+	echo "7z is required"
+	usage
+fi
+
+if [ x$guest_iso = x ]; then
+# try to use iso from VirtualBox
+	guest_iso=/usr/share/virtualbox/VBoxGuestAdditions.iso
+fi
+
+if [ ! -f $guest_iso ]; then
+	usage
+fi
+
+if [ ! -d $work_dir ]; then
+	mkdir $work_dir
+fi
+
+7z x -y -o$work_dir $guest_iso VBoxLinuxAdditions.run
+if [ ! -f $work_dir/VBoxLinuxAdditions.run ]; then
+	echo "Unable to extract the VBoxLinuxAdditions.run file"
+	usage
+fi
+
+chmod +x $work_dir/VBoxLinuxAdditions.run
+$work_dir/VBoxLinuxAdditions.run --noexec --target $work_dir
+
+if [ ! -f $work_dir/$guest_tar ]; then
+	echo "Unable to extract the $guest_tar file"
+	usage
+fi
+
+tar xfj $work_dir/$guest_tar -C $work_dir
+
+echo "Cleanup working dir..."
+rm -f $work_dir/* 2> /dev/null
+rm -rf $work_dir/{bin,init,lib,sbin,installer,other,share}
+
