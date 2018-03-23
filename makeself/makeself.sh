@@ -439,11 +439,11 @@ fi
 case $COMPRESS in
 gzip)
     GZIP_CMD="gzip -c$COMPRESS_LEVEL"
-    GUNZIP_CMD="gzip -cd"
+    GUNZIP_CMD="gzip -c -d"
     ;;
 pigz) 
     GZIP_CMD="pigz -$COMPRESS_LEVEL"
-    GUNZIP_CMD="gzip -cd"
+    GUNZIP_CMD="gzip -c -d"
     ;;
 pbzip2)
     GZIP_CMD="pbzip2 -c$COMPRESS_LEVEL"

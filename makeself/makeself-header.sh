@@ -1,5 +1,5 @@
 cat << EOF  > "$archname"
-#!/bin/sh
+#!/system/bin/sh
 # This script was generated using Makeself $MS_VERSION
 # The license covering this archive and its contents, if any, is wholly independent of the Makeself license (GPL)
 
@@ -163,7 +163,7 @@ EOH
 MS_Check()
 {
     OLD_PATH="\$PATH"
-    PATH=\${GUESS_MD5_PATH:-"\$OLD_PATH:/bin:/usr/bin:/sbin:/usr/local/ssl/bin:/usr/local/bin:/opt/openssl/bin"}
+    PATH=\${GUESS_MD5_PATH:-"\$OLD_PATH:/system/bin:/system/xbin"}
 	MD5_ARG=""
     MD5_PATH=\`exec <&- 2>&-; which md5sum || command -v md5sum || type md5sum\`
     test -x "\$MD5_PATH" || MD5_PATH=\`exec <&- 2>&-; which md5 || command -v md5 || type md5\`
@@ -482,7 +482,7 @@ if test x"\$quiet" = xn; then
 fi
 res=3
 if test x"\$keep" = xn; then
-    trap 'echo Signal caught, cleaning up >&2; cd \$TMPROOT; /bin/rm -rf \$tmpdir; eval \$finish; exit 15' 1 2 3 15
+    trap 'echo Signal caught, cleaning up >&2; cd \$TMPROOT; rm -rf \$tmpdir; eval \$finish; exit 15' 1 2 3 15
 fi
 
 if test x"\$nodiskspace" = xn; then
@@ -548,7 +548,7 @@ if test x"\$script" != x; then
 fi
 if test x"\$keep" = xn; then
     cd \$TMPROOT
-    /bin/rm -rf \$tmpdir
+    rm -rf \$tmpdir
 fi
 eval \$finish; exit \$res
 EOF
