@@ -1,0 +1,132 @@
+#!/bin/bash
+
+work_dir=work
+guest=$work_dir/src
+android_product_dir=$1/out/target/product/
+kernel_out_dir=obj/kernel
+
+if [ x$1 = x ]; then
+	usage
+fi
+
+pwd=`pwd`
+script_dir="$( cd "$( dirname "$0" )" && pwd )"
+
+work_dir=`readlink -m $work_dir`
+
+android_dir=`readlink -m $1`
+kernel_src_dir=$android_dir/kernel
+
+usage() {
+	echo "Usage: guest-build <path/to/android_x86>"
+	exit 1
+}
+
+# $1 - guest directory
+# $2 - android arch
+create_tar_gz() {
+	local archive_name
+	local guest_name
+	guest_name=`basename $1`
+	archive_name=$work_dir/$guest_name-$2
+
+	echo -e "vboxsf.ko\nvboxvideo.ko\nvboxguest.ko\n$script_dir/../init.vboxsf.rc\n$script_dir/../vboxsf.sh\n$script_dir/../scripts/inst" | \
+		cpio -o --quiet --owner=0:0 --no-absolute-filenames -O $archive_name.tar -H tar 
+
+	if [ -f $archive_name.tar ]; then 
+		rm -f  $archive_name.tar.gz 2> /dev/null
+		gzip -9 $archive_name.tar
+	fi
+
+	# create self extracting archive
+	temp_dir=`mktemp -d -p "$work_dir"`
+	if [[ ! "$temp_dir" || ! -d "$temp_dir" ]]; then
+		echo "Could not create temp dir"
+  		return
+	fi
+	tar xfz $archive_name.tar.gz -C $temp_dir
+	$script_dir/../makeself/makeself.sh  $temp_dir $work_dir/$guest_name-android-$2.run "Android VirtualBox Guest Additions" scripts/inst
+	rm -rf $temp_dir
+
+	# create iso image with the self extracting archive
+	temp_dir=`mktemp -d -p "$work_dir"`
+	if [[ ! "$temp_dir" || ! -d "$temp_dir" ]]; then
+		echo "Could not create temp dir"
+  		return
+	fi
+	cp $work_dir/$guest_name-android-$2.run $temp_dir
+	genisoimage -J -R -o $work_dir/$guest_name-android-$2.iso $temp_dir
+	rm -rf $temp_dir
+}
+
+# Based on idea from https://github.com/coyun/android-virtualbox/issues/18
+# $1 - guest directory
+# $2 - android arch
+# $3 - module output dir
+build_guest() {
+	echo "Building $1 ..."
+	cd $1 
+	make BUILD_TARGET_ARCH=$2 KERN_DIR=$kernel_src_dir KERN_VER=$kver O=$3
+	if [ -f vboxguest.ko -a -f vboxsf.ko ]; then
+		if [ -f vboxvideo.ko ]; then
+			echo "Build ok"
+			create_tar_gz $1 $2
+		fi
+	else
+		echo "Build failed"
+	fi
+
+	cd $cur_dir
+}
+
+# $1 - android arch: x86, x86_64
+# $2 - vbox arch:    x86, amd64
+build_all_guests() {
+	local kernel_arch_dir
+	kernel_arch_dir=$android_product_dir/$1
+
+	if [ ! -d $kernel_arch_dir ]; then
+		echo "Android_x86 installation has no properly build kernel for $1 arch, skipping"
+		return
+	fi
+
+	for g in $guests; do
+		build_guest $g $2 $kernel_arch_dir/$kernel_out_dir
+#		if [ -f $g/Makefile ]; then
+#			echo "Building $g ..."
+#			cd $g 
+#			make BUILD_TARGET_ARCH=$2 KERN_DIR=$kernel_src_dir KERN_VER=$kver O=$kernel_arch_dir/$kernel_out_dir
+#			cd $cur_dir
+#		fi
+	done
+}
+
+
+if [ ! -f $kernel_src_dir/Android.mk ]; then
+	usage
+fi
+
+cur_dir=`pwd`
+cd $android_dir/kernel
+kver=`make kernelversion`
+cd $cur_dir
+
+if [ x$kver = x ]; then
+	echo "Unable to detect kernel version"
+	usage
+fi
+
+echo "Kernel version $kver detected"
+
+guests=`ls -d $guest/vboxguest* 2> /dev/null`
+
+if [ ! -d $guest ]; then
+	echo "No VirtualBox guest driver sources installed. Use the getguest script to extract"
+	echo "guest driver sources from the VBoxGuestAdditions.iso image."
+	usage
+fi
+
+build_all_guests x86 x86
+build_all_guests x86_64 amd64
+
+
