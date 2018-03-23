@@ -1,0 +1,105 @@
+#!/bin/bash
+
+guest_iso=$1
+android_product_dir=$2
+# sources for x86 and x64 are the same, use one of them
+guest_tar=VBoxGuestAdditions-amd64.tar.bz2
+
+usage() {
+	echo "Usage: guest-extract <VBoxGuestAdditions.iso> <path/to/android-x86>"
+	echo "The utility copy guest drivers sources from VirtualBox guest additions iso image"
+	echo "to the android-x86 source tree. After that guest additions drivers and mount utility can be"
+	echo "built inside the android-x86 source tree."
+	exit 1
+}
+
+check=`which 7z`
+if [ x$check = x ]; then
+	echo "7z is required"
+	usage
+fi
+
+#if [ x$guest_iso = x ]; then
+# try to use iso from VirtualBox
+#	guest_iso=/usr/share/virtualbox/VBoxGuestAdditions.iso
+#fi
+
+if [ ! -f $guest_iso ]; then
+	usage
+fi
+
+if [ x$android_product_dir = x ]; then
+	usage
+fi
+
+if [ ! -d $android_product_dir/external ]; then
+	usage
+fi
+
+if [ -d $android_product_dir/external/vboxsf ]; then
+	rm -rf $android_product_dir/external/vboxsf
+fi
+
+mkdir -p $android_product_dir/external/vboxsf
+cp -afr src/* $android_product_dir/external/vboxsf/
+
+work_dir=`mktemp -d -p "./" 2> /dev/null`
+if [[ ! "$work_dir" || ! -d "$work_dir" ]]; then
+	echo "Could not create temp dir"
+	exit 1
+fi
+
+7z x -y -o$work_dir $guest_iso VBoxLinuxAdditions.run
+if [ ! -f $work_dir/VBoxLinuxAdditions.run ]; then
+	echo "Unable to extract the VBoxLinuxAdditions.run file"
+	rm -rf $work_dir
+	usage
+fi
+
+chmod +x $work_dir/VBoxLinuxAdditions.run
+$work_dir/VBoxLinuxAdditions.run --noexec --target $work_dir/
+
+if [ ! -f $work_dir/$guest_tar ]; then
+	echo "Unable to extract the $guest_tar file"
+	rm -rf $work_dir
+	usage
+fi
+
+create_guest_mk() {
+cat > "$1" << EOF
+LOCAL_PATH := \$(my-dir)
+include \$(CLEAR_VARS)
+
+LOCAL_MODULE := vboxguest
+EXTRA_KERNEL_MODULE_PATH_\$(LOCAL_MODULE) := \$(LOCAL_PATH)
+TARGET_EXTRA_KERNEL_MODULES += vboxguest
+EOF
+}
+
+mk_empty_dir() {
+	if [ -d $1 ]; then
+		rm -rf $1
+	fi 
+	mkdir $1
+}
+
+
+tar xfj $work_dir/$guest_tar -C $work_dir
+
+guests=`ls -d $work_dir/src/vboxguest-* 2> /dev/null`
+guests=`basename $guests`
+
+if [ -d $android_product_dir/device/generic/x86/ ]; then
+	mk_empty_dir $android_product_dir/device/generic/x86/vboxguest
+	cp -afr $work_dir/src/$guests/*  $android_product_dir/device/generic/x86/vboxguest/
+	create_guest_mk $android_product_dir/device/generic/x86/vboxguest/Android.mk
+fi
+
+if [ -d $android_product_dir/device/generic/x86_64/ ]; then
+	mk_empty_dir $android_product_dir/device/generic/x86_64/vboxguest
+	cp -afr $work_dir/src/$guests/*  $android_product_dir/device/generic/x86_64/vboxguest/
+	create_guest_mk $android_product_dir/device/generic/x86_64/vboxguest/Android.mk
+fi
+
+rm -rf $work_dir
+
