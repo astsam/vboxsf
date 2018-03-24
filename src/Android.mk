@@ -13,11 +13,18 @@ include $(BUILD_EXECUTABLE)
 
 include $(CLEAR_VARS)
 
+VBOXSF_ANDROID_MAJOR_VERSION := $(word 1, $(subst ., , $(PLATFORM_VERSION)))
+
 LOCAL_MODULE := init.vboxsf.rc
 LOCAL_MODULE_CLASS := ETC
 LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_TAGS := optional
+ifeq "6" "$(VBOXSF_ANDROID_MAJOR_VERSION)"
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
+else
+LOCAL_INIT_RC := init.vboxsf.rc
+endif
+
 include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
