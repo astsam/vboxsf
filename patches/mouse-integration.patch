@@ -1,10 +1,10 @@
 
 project frameworks/native/
 diff --git a/frameworks/native/services/inputflinger/InputReader.cpp b/frameworks/native/services/inputflinger/InputReader.cpp
-index fb270ed..a5b2222 100644
+index cbd1639..890641e 100644
 --- a/frameworks/native/services/inputflinger/InputReader.cpp
 +++ b/frameworks/native/services/inputflinger/InputReader.cpp
-@@ -249,7 +249,9 @@ void TouchAffineTransformation::applyTo(float& x, float& y) const {
+@@ -257,7 +257,9 @@ void TouchAffineTransformation::applyTo(float& x, float& y) const {
  InputReader::InputReader(const sp<EventHubInterface>& eventHub,
          const sp<InputReaderPolicyInterface>& policy,
          const sp<InputListenerInterface>& listener) :
@@ -15,7 +15,7 @@ index fb270ed..a5b2222 100644
          mGlobalMetaState(0), mGeneration(1),
          mDisableVirtualKeysTimeout(LLONG_MIN), mNextTimeout(LLONG_MAX),
          mConfigurationChangesToRefresh(0) {
-@@ -410,6 +412,11 @@ void InputReader::removeDeviceLocked(nsecs_t when, int32_t deviceId) {
+@@ -418,6 +420,11 @@ void InputReader::removeDeviceLocked(nsecs_t when, int32_t deviceId) {
          return;
      }
  
@@ -27,7 +27,7 @@ index fb270ed..a5b2222 100644
      device = mDevices.valueAt(deviceIndex);
      mDevices.removeItemsAt(deviceIndex, 1);
      bumpGenerationLocked();
-@@ -455,6 +462,17 @@ InputDevice* InputReader::createDeviceLocked(int32_t deviceId, int32_t controlle
+@@ -468,6 +475,17 @@ InputDevice* InputReader::createDeviceLocked(int32_t deviceId, int32_t controlle
          device->addMapper(new VibratorInputMapper(device));
      }
  
@@ -45,7 +45,7 @@ index fb270ed..a5b2222 100644
      // Keyboard-like devices.
      uint32_t keyboardSource = 0;
      int32_t keyboardType = AINPUT_KEYBOARD_TYPE_NON_ALPHABETIC;
-@@ -502,6 +520,11 @@ InputDevice* InputReader::createDeviceLocked(int32_t deviceId, int32_t controlle
+@@ -515,6 +533,11 @@ InputDevice* InputReader::createDeviceLocked(int32_t deviceId, int32_t controlle
  
  void InputReader::processEventsForDeviceLocked(int32_t deviceId,
          const RawEvent* rawEvents, size_t count) {
@@ -57,7 +57,7 @@ index fb270ed..a5b2222 100644
      ssize_t deviceIndex = mDevices.indexOfKey(deviceId);
      if (deviceIndex < 0) {
          ALOGW("Discarding event for unknown deviceId %d.", deviceId);
-@@ -1269,10 +1292,14 @@ uint32_t CursorButtonAccumulator::getButtonState() const {
+@@ -1304,10 +1327,14 @@ uint32_t CursorButtonAccumulator::getButtonState() const {
  
  CursorMotionAccumulator::CursorMotionAccumulator() {
      clearRelativeAxes();
@@ -72,7 +72,7 @@ index fb270ed..a5b2222 100644
  }
  
  void CursorMotionAccumulator::clearRelativeAxes() {
-@@ -1289,6 +1316,15 @@ void CursorMotionAccumulator::process(const RawEvent* rawEvent) {
+@@ -1324,6 +1351,15 @@ void CursorMotionAccumulator::process(const RawEvent* rawEvent) {
          case REL_Y:
              mRelY = rawEvent->value;
              break;
@@ -88,7 +88,7 @@ index fb270ed..a5b2222 100644
          }
      }
  }
-@@ -2367,8 +2403,9 @@ void KeyboardInputMapper::updateLedStateForModifier(LedState& ledState,
+@@ -2413,8 +2449,9 @@ void KeyboardInputMapper::updateLedStateForModifier(LedState& ledState,
  
  // --- CursorInputMapper ---
  
@@ -99,7 +99,7 @@ index fb270ed..a5b2222 100644
  }
  
  CursorInputMapper::~CursorInputMapper() {
-@@ -2472,6 +2509,13 @@ void CursorInputMapper::configure(nsecs_t when,
+@@ -2518,6 +2555,13 @@ void CursorInputMapper::configure(nsecs_t when,
          }
          bumpGeneration();
      }
@@ -113,7 +113,7 @@ index fb270ed..a5b2222 100644
  }
  
  void CursorInputMapper::configureParameters() {
-@@ -2485,6 +2529,9 @@ void CursorInputMapper::configureParameters() {
+@@ -2531,6 +2575,9 @@ void CursorInputMapper::configureParameters() {
          }
      }
  
@@ -123,7 +123,7 @@ index fb270ed..a5b2222 100644
      mParameters.orientationAware = false;
      getDevice()->getConfiguration().tryGetProperty(String8("cursor.orientationAware"),
              mParameters.orientationAware);
-@@ -2565,6 +2612,14 @@ void CursorInputMapper::sync(nsecs_t when) {
+@@ -2611,6 +2658,14 @@ void CursorInputMapper::sync(nsecs_t when) {
      float deltaY = mCursorMotionAccumulator.getRelativeY() * mYScale;
      bool moved = deltaX != 0 || deltaY != 0;
  
@@ -138,7 +138,18 @@ index fb270ed..a5b2222 100644
      // Rotate delta according to orientation if needed.
      if (mParameters.orientationAware && mParameters.hasAssociatedDisplay
              && (deltaX != 0.0f || deltaY != 0.0f)) {
-@@ -2624,7 +2679,7 @@ void CursorInputMapper::sync(nsecs_t when) {
+@@ -2633,7 +2688,9 @@ void CursorInputMapper::sync(nsecs_t when) {
+     mWheelYVelocityControl.move(when, NULL, &vscroll);
+     mWheelXVelocityControl.move(when, &hscroll, NULL);
+ 
+-    mPointerVelocityControl.move(when, &deltaX, &deltaY);
++	if(!mParameters.absMouse) {
++	    mPointerVelocityControl.move(when, &deltaX, &deltaY);
++	}
+ 
+     int32_t displayId;
+     if (mPointerController != NULL) {
+@@ -2672,7 +2729,7 @@ void CursorInputMapper::sync(nsecs_t when) {
      // the device in your pocket.
      // TODO: Use the input device configuration to control this behavior more finely.
      uint32_t policyFlags = 0;
@@ -148,10 +159,10 @@ index fb270ed..a5b2222 100644
      }
  
 diff --git a/frameworks/native/services/inputflinger/InputReader.h b/frameworks/native/services/inputflinger/InputReader.h
-index 32bf188..60481de 100644
+index 6bf3818..d31691d 100644
 --- a/frameworks/native/services/inputflinger/InputReader.h
 +++ b/frameworks/native/services/inputflinger/InputReader.h
-@@ -499,6 +499,12 @@ protected:
+@@ -504,6 +504,12 @@ protected:
      friend class ContextImpl;
  
  private:
@@ -164,7 +175,7 @@ index 32bf188..60481de 100644
      Mutex mLock;
  
      Condition mReaderIsAliveCondition;
-@@ -705,11 +711,35 @@ public:
+@@ -711,11 +717,35 @@ public:
  
      inline int32_t getRelativeX() const { return mRelX; }
      inline int32_t getRelativeY() const { return mRelY; }
@@ -201,7 +212,7 @@ index 32bf188..60481de 100644
      void clearRelativeAxes();
  };
  
-@@ -1168,7 +1198,7 @@ private:
+@@ -1178,7 +1208,7 @@ private:
  
  class CursorInputMapper : public InputMapper {
  public:
@@ -210,7 +221,7 @@ index 32bf188..60481de 100644
      virtual ~CursorInputMapper();
  
      virtual uint32_t getSources();
-@@ -1196,6 +1226,7 @@ private:
+@@ -1206,6 +1236,7 @@ private:
          Mode mode;
          bool hasAssociatedDisplay;
          bool orientationAware;
