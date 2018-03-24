@@ -1,0 +1,220 @@
+
+project frameworks/native/
+diff --git a/frameworks/native/services/inputflinger/InputReader.cpp b/frameworks/native/services/inputflinger/InputReader.cpp
+index fb270ed..a5b2222 100644
+--- a/frameworks/native/services/inputflinger/InputReader.cpp
++++ b/frameworks/native/services/inputflinger/InputReader.cpp
+@@ -249,7 +249,9 @@ void TouchAffineTransformation::applyTo(float& x, float& y) const {
+ InputReader::InputReader(const sp<EventHubInterface>& eventHub,
+         const sp<InputReaderPolicyInterface>& policy,
+         const sp<InputListenerInterface>& listener) :
+-        mContext(this), mEventHub(eventHub), mPolicy(policy),
++		mContext(this),		
++		mEvRedirToID(NO_EV_REDIR_DEVICEID), mEvRedirFromID(NO_EV_REDIR_DEVICEID),
++        mEventHub(eventHub), mPolicy(policy),
+         mGlobalMetaState(0), mGeneration(1),
+         mDisableVirtualKeysTimeout(LLONG_MIN), mNextTimeout(LLONG_MAX),
+         mConfigurationChangesToRefresh(0) {
+@@ -410,6 +412,11 @@ void InputReader::removeDeviceLocked(nsecs_t when, int32_t deviceId) {
+         return;
+     }
+ 
++	if(mEvRedirToID == deviceId)
++		mEvRedirToID = NO_EV_REDIR_DEVICEID;
++	if(mEvRedirFromID == deviceId)
++		mEvRedirFromID = NO_EV_REDIR_DEVICEID;
++
+     device = mDevices.valueAt(deviceIndex);
+     mDevices.removeItemsAt(deviceIndex, 1);
+     bumpGenerationLocked();
+@@ -455,6 +462,17 @@ InputDevice* InputReader::createDeviceLocked(int32_t deviceId, int32_t controlle
+         device->addMapper(new VibratorInputMapper(device));
+     }
+ 
++	// See if this is a VirtualBox integration device, we need cursor
++	if (identifier.vendor == 0x80ee && identifier.product == 0xcafe) {
++//        classes &= ~(INPUT_DEVICE_CLASS_TOUCH | INPUT_DEVICE_CLASS_CURSOR);
++        classes &= ~INPUT_DEVICE_CLASS_CURSOR;
++		mEvRedirToID = deviceId;
++        device->addMapper(new CursorInputMapper(device, true));
++    } else if (identifier.vendor == 2 && identifier.product == 6) {
++		ALOGV(" ---- redirect from %d %s", deviceId, identifier.name.string());
++		mEvRedirFromID = deviceId;
++	}
++
+     // Keyboard-like devices.
+     uint32_t keyboardSource = 0;
+     int32_t keyboardType = AINPUT_KEYBOARD_TYPE_NON_ALPHABETIC;
+@@ -502,6 +520,11 @@ InputDevice* InputReader::createDeviceLocked(int32_t deviceId, int32_t controlle
+ 
+ void InputReader::processEventsForDeviceLocked(int32_t deviceId,
+         const RawEvent* rawEvents, size_t count) {
++	if(mEvRedirToID != NO_EV_REDIR_DEVICEID && mEvRedirFromID == deviceId) {
++		ALOGV(" ----- redirect %d->%d", mEvRedirFromID, mEvRedirToID);
++		deviceId = mEvRedirToID;
++	}
++
+     ssize_t deviceIndex = mDevices.indexOfKey(deviceId);
+     if (deviceIndex < 0) {
+         ALOGW("Discarding event for unknown deviceId %d.", deviceId);
+@@ -1269,10 +1292,14 @@ uint32_t CursorButtonAccumulator::getButtonState() const {
+ 
+ CursorMotionAccumulator::CursorMotionAccumulator() {
+     clearRelativeAxes();
++	mAbsX = 0;
++	mAbsY = 0;
+ }
+ 
+ void CursorMotionAccumulator::reset(InputDevice* device) {
+     clearRelativeAxes();
++	mAbsX = 0;
++	mAbsY = 0;
+ }
+ 
+ void CursorMotionAccumulator::clearRelativeAxes() {
+@@ -1289,6 +1316,15 @@ void CursorMotionAccumulator::process(const RawEvent* rawEvent) {
+         case REL_Y:
+             mRelY = rawEvent->value;
+             break;
++		}
++	}else if (rawEvent->type == EV_ABS) {
++        switch (rawEvent->code) {    
++	    case ABS_X:
++            mAbsX = rawEvent->value;
++            break;
++        case ABS_Y:
++            mAbsY = rawEvent->value;
++            break;
+         }
+     }
+ }
+@@ -2367,8 +2403,9 @@ void KeyboardInputMapper::updateLedStateForModifier(LedState& ledState,
+ 
+ // --- CursorInputMapper ---
+ 
+-CursorInputMapper::CursorInputMapper(InputDevice* device) :
++CursorInputMapper::CursorInputMapper(InputDevice* device, bool absMouse) :
+         InputMapper(device) {
++    mParameters.absMouse = absMouse;
+ }
+ 
+ CursorInputMapper::~CursorInputMapper() {
+@@ -2472,6 +2509,13 @@ void CursorInputMapper::configure(nsecs_t when,
+         }
+         bumpGeneration();
+     }
++
++    if (mPointerController != NULL) {
++		float minX, minY, maxX, maxY;
++		if(mPointerController->getBounds(&minX, &minY, &maxX, &maxY)) {
++			mCursorMotionAccumulator.setBounds(minX, minY, maxX, maxY);
++		}
++	}
+ }
+ 
+ void CursorInputMapper::configureParameters() {
+@@ -2485,6 +2529,9 @@ void CursorInputMapper::configureParameters() {
+         }
+     }
+ 
++    getDevice()->getConfiguration().tryGetProperty(String8("cursor.absMouse"),
++            mParameters.absMouse);
++
+     mParameters.orientationAware = false;
+     getDevice()->getConfiguration().tryGetProperty(String8("cursor.orientationAware"),
+             mParameters.orientationAware);
+@@ -2565,6 +2612,14 @@ void CursorInputMapper::sync(nsecs_t when) {
+     float deltaY = mCursorMotionAccumulator.getRelativeY() * mYScale;
+     bool moved = deltaX != 0 || deltaY != 0;
+ 
++	if(mParameters.absMouse) {
++        float x, y;
++        mPointerController->getPosition(&x, &y);
++		deltaX = mCursorMotionAccumulator.getRelAbsX(x);
++		deltaY = mCursorMotionAccumulator.getRelAbsY(y);
++		moved = deltaX != 0 || deltaY != 0;
++		ALOGV(" ----- abs->rel x:%f y:%f dx:%f dy:%f xscal:%f yscal:%f", x, y, deltaX, deltaY, mXScale, mYScale);
++	}
+     // Rotate delta according to orientation if needed.
+     if (mParameters.orientationAware && mParameters.hasAssociatedDisplay
+             && (deltaX != 0.0f || deltaY != 0.0f)) {
+@@ -2624,7 +2679,7 @@ void CursorInputMapper::sync(nsecs_t when) {
+     // the device in your pocket.
+     // TODO: Use the input device configuration to control this behavior more finely.
+     uint32_t policyFlags = 0;
+-    if ((buttonsPressed || moved || scrolled) && getDevice()->isExternal()) {
++    if ((buttonsPressed || moved || scrolled) && (getDevice()->isExternal() || mParameters.absMouse)) {
+         policyFlags |= POLICY_FLAG_WAKE;
+     }
+ 
+diff --git a/frameworks/native/services/inputflinger/InputReader.h b/frameworks/native/services/inputflinger/InputReader.h
+index 32bf188..60481de 100644
+--- a/frameworks/native/services/inputflinger/InputReader.h
++++ b/frameworks/native/services/inputflinger/InputReader.h
+@@ -499,6 +499,12 @@ protected:
+     friend class ContextImpl;
+ 
+ private:
++	enum {
++		NO_EV_REDIR_DEVICEID = -1000,
++	};
++	int mEvRedirToID;	// deviceID of the VirtualBox mouse intergration device
++	int mEvRedirFromID;	// deviceID of PS/2 mouse
++
+     Mutex mLock;
+ 
+     Condition mReaderIsAliveCondition;
+@@ -705,11 +711,35 @@ public:
+ 
+     inline int32_t getRelativeX() const { return mRelX; }
+     inline int32_t getRelativeY() const { return mRelY; }
+-
++    inline float getRelAbsX(float x) const {
++		float relX = (mMaxX - mMinX) * (float)mAbsX;
++		ALOGV(" ----= x:%d", mAbsX);
++		return relX/65535.0 - x; 
++	}
++    inline int32_t getRelAbsY(float y) const { 
++		float relY = (mMaxY - mMinY) * (float)mAbsY;
++		ALOGV(" ----= y:%d", mAbsY);
++		return relY/65535.0 - y; 
++	}
++
++	inline void setBounds(float minX, float minY, float maxX, float maxY) {
++		mMinX = minX;
++		mMaxX = maxX;
++		mMinY = minY;
++		mMaxY = maxY;
++	}
+ private:
+     int32_t mRelX;
+     int32_t mRelY;
+ 
++    int32_t mAbsX;
++    int32_t mAbsY;
++
++	float mMinX;
++	float mMinY;
++	float mMaxX;
++	float mMaxY;
++
+     void clearRelativeAxes();
+ };
+ 
+@@ -1168,7 +1198,7 @@ private:
+ 
+ class CursorInputMapper : public InputMapper {
+ public:
+-    CursorInputMapper(InputDevice* device);
++    CursorInputMapper(InputDevice* device, bool absMouse = false);
+     virtual ~CursorInputMapper();
+ 
+     virtual uint32_t getSources();
+@@ -1196,6 +1226,7 @@ private:
+         Mode mode;
+         bool hasAssociatedDisplay;
+         bool orientationAware;
++		bool absMouse;
+     } mParameters;
+ 
+     CursorButtonAccumulator mCursorButtonAccumulator;
