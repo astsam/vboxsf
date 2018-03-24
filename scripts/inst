@@ -23,8 +23,9 @@ if [ -d $mod_dir ]; then
 		modules_dep=$modules_dir/modules.dep
 		vbox_dep=`grep vboxguest $modules_dep` 
 		if [ "x$vbox_dep" = x ]; then
-			echo "extra/vboxsf.ko: extra/vboxguest.ko" >> $modules_dep
 			echo "extra/vboxvideo.ko: extra/vboxguest.ko" >> $modules_dep
+			echo "extra/vboxsf.ko: extra/vboxguest.ko" >> $modules_dep
+			echo "extra/vboxvideo.ko: extra/vboxguest/vboxguest.ko kernel/drivers/gpu/drm/ttm/ttm.ko kernel/drivers/gpu/drm/drm_kms_helper.ko kernel/drivers/gpu/drm/drm.ko kernel/drivers/video/fbdev/core/fb_sys_fops.ko kernel/drivers/video/fbdev/core/sysfillrect.ko kernel/drivers/video/fbdev/core/syscopyarea.ko kernel/drivers/video/fbdev/core/sysimgblt.ko" >> $modules_dep
 			echo "extra/vboxguest.ko:" >> $modules_dep
 		fi
 	fi
