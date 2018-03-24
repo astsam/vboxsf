@@ -1,7 +1,7 @@
 
 project frameworks/native/
 diff --git a/frameworks/native/services/inputflinger/InputReader.cpp b/frameworks/native/services/inputflinger/InputReader.cpp
-index cbd1639..890641e 100644
+index cbd1639..9c45772 100644
 --- a/frameworks/native/services/inputflinger/InputReader.cpp
 +++ b/frameworks/native/services/inputflinger/InputReader.cpp
 @@ -257,7 +257,9 @@ void TouchAffineTransformation::applyTo(float& x, float& y) const {
@@ -57,27 +57,24 @@ index cbd1639..890641e 100644
      ssize_t deviceIndex = mDevices.indexOfKey(deviceId);
      if (deviceIndex < 0) {
          ALOGW("Discarding event for unknown deviceId %d.", deviceId);
-@@ -1304,10 +1327,14 @@ uint32_t CursorButtonAccumulator::getButtonState() const {
- 
- CursorMotionAccumulator::CursorMotionAccumulator() {
+@@ -1332,6 +1355,35 @@ void CursorMotionAccumulator::finishSync() {
      clearRelativeAxes();
-+	mAbsX = 0;
-+	mAbsY = 0;
  }
  
- void CursorMotionAccumulator::reset(InputDevice* device) {
-     clearRelativeAxes();
++// --- CursorAbsoluteMotionAccumulator ---
++
++CursorAbsoluteMotionAccumulator::CursorAbsoluteMotionAccumulator() {
 +	mAbsX = 0;
 +	mAbsY = 0;
- }
- 
- void CursorMotionAccumulator::clearRelativeAxes() {
-@@ -1324,6 +1351,15 @@ void CursorMotionAccumulator::process(const RawEvent* rawEvent) {
-         case REL_Y:
-             mRelY = rawEvent->value;
-             break;
-+		}
-+	}else if (rawEvent->type == EV_ABS) {
++}
++
++void CursorAbsoluteMotionAccumulator::reset(InputDevice* device) {
++	mAbsX = 0;
++	mAbsY = 0;
++}
++
++void CursorAbsoluteMotionAccumulator::process(const RawEvent* rawEvent) {
++	if (rawEvent->type == EV_ABS) {
 +        switch (rawEvent->code) {    
 +	    case ABS_X:
 +            mAbsX = rawEvent->value;
@@ -85,10 +82,18 @@ index cbd1639..890641e 100644
 +        case ABS_Y:
 +            mAbsY = rawEvent->value;
 +            break;
-         }
-     }
- }
-@@ -2413,8 +2449,9 @@ void KeyboardInputMapper::updateLedStateForModifier(LedState& ledState,
++        }
++    }
++}
++
++void CursorAbsoluteMotionAccumulator::finishSync() {
++    mAbsX = 0;
++	mAbsY = 0;
++}
+ 
+ // --- CursorScrollAccumulator ---
+ 
+@@ -2413,8 +2465,9 @@ void KeyboardInputMapper::updateLedStateForModifier(LedState& ledState,
  
  // --- CursorInputMapper ---
  
@@ -99,7 +104,7 @@ index cbd1639..890641e 100644
  }
  
  CursorInputMapper::~CursorInputMapper() {
-@@ -2518,6 +2555,13 @@ void CursorInputMapper::configure(nsecs_t when,
+@@ -2518,6 +2571,13 @@ void CursorInputMapper::configure(nsecs_t when,
          }
          bumpGeneration();
      }
@@ -107,13 +112,13 @@ index cbd1639..890641e 100644
 +    if (mPointerController != NULL) {
 +		float minX, minY, maxX, maxY;
 +		if(mPointerController->getBounds(&minX, &minY, &maxX, &maxY)) {
-+			mCursorMotionAccumulator.setBounds(minX, minY, maxX, maxY);
++			mCursorAbsoluteMotionAccumulator.setBounds(minX, minY, maxX, maxY);
 +		}
 +	}
  }
  
  void CursorInputMapper::configureParameters() {
-@@ -2531,6 +2575,9 @@ void CursorInputMapper::configureParameters() {
+@@ -2531,6 +2591,9 @@ void CursorInputMapper::configureParameters() {
          }
      }
  
@@ -123,33 +128,49 @@ index cbd1639..890641e 100644
      mParameters.orientationAware = false;
      getDevice()->getConfiguration().tryGetProperty(String8("cursor.orientationAware"),
              mParameters.orientationAware);
-@@ -2611,6 +2658,14 @@ void CursorInputMapper::sync(nsecs_t when) {
+@@ -2572,6 +2635,7 @@ void CursorInputMapper::reset(nsecs_t when) {
+     mCursorButtonAccumulator.reset(getDevice());
+     mCursorMotionAccumulator.reset(getDevice());
+     mCursorScrollAccumulator.reset(getDevice());
++    mCursorAbsoluteMotionAccumulator.reset(getDevice());
+ 
+     InputMapper::reset(when);
+ }
+@@ -2580,6 +2644,7 @@ void CursorInputMapper::process(const RawEvent* rawEvent) {
+     mCursorButtonAccumulator.process(rawEvent);
+     mCursorMotionAccumulator.process(rawEvent);
+     mCursorScrollAccumulator.process(rawEvent);
++    mCursorAbsoluteMotionAccumulator.process(rawEvent);
+ 
+     if (rawEvent->type == EV_SYN && rawEvent->code == SYN_REPORT) {
+         sync(rawEvent->when);
+@@ -2611,6 +2676,14 @@ void CursorInputMapper::sync(nsecs_t when) {
      float deltaY = mCursorMotionAccumulator.getRelativeY() * mYScale;
      bool moved = deltaX != 0 || deltaY != 0;
  
-+	if(mParameters.absMouse) {
++    if(mParameters.absMouse) {
 +        float x, y;
 +        mPointerController->getPosition(&x, &y);
-+		deltaX = mCursorMotionAccumulator.getRelAbsX(x);
-+		deltaY = mCursorMotionAccumulator.getRelAbsY(y);
-+		moved = deltaX != 0 || deltaY != 0;
-+		ALOGV(" ----- abs->rel x:%f y:%f dx:%f dy:%f xscal:%f yscal:%f", x, y, deltaX, deltaY, mXScale, mYScale);
++        deltaX = mCursorAbsoluteMotionAccumulator.getRelAbsX(x);
++        deltaY = mCursorAbsoluteMotionAccumulator.getRelAbsY(y);
++        moved = deltaX != 0 || deltaY != 0;
++        ALOGV(" ----- abs->rel x:%f y:%f dx:%f dy:%f xscal:%f yscal:%f", x, y, deltaX, deltaY, mXScale, mYScale);
 +	}
      // Rotate delta according to orientation if needed.
      if (mParameters.orientationAware && mParameters.hasAssociatedDisplay
              && (deltaX != 0.0f || deltaY != 0.0f)) {
-@@ -2633,7 +2688,9 @@ void CursorInputMapper::sync(nsecs_t when) {
+@@ -2633,7 +2706,9 @@ void CursorInputMapper::sync(nsecs_t when) {
      mWheelYVelocityControl.move(when, NULL, &vscroll);
      mWheelXVelocityControl.move(when, &hscroll, NULL);
  
 -    mPointerVelocityControl.move(when, &deltaX, &deltaY);
-+	if(!mParameters.absMouse) {
++    if(!mParameters.absMouse) {
 +	    mPointerVelocityControl.move(when, &deltaX, &deltaY);
-+	}
++    }
  
      int32_t displayId;
      if (mPointerController != NULL) {
-@@ -2672,7 +2729,7 @@ void CursorInputMapper::sync(nsecs_t when) {
+@@ -2672,7 +2747,7 @@ void CursorInputMapper::sync(nsecs_t when) {
      // the device in your pocket.
      // TODO: Use the input device configuration to control this behavior more finely.
      uint32_t policyFlags = 0;
@@ -159,7 +180,7 @@ index cbd1639..890641e 100644
      }
  
 diff --git a/frameworks/native/services/inputflinger/InputReader.h b/frameworks/native/services/inputflinger/InputReader.h
-index 6bf3818..d31691d 100644
+index 6bf3818..86daa36 100644
 --- a/frameworks/native/services/inputflinger/InputReader.h
 +++ b/frameworks/native/services/inputflinger/InputReader.h
 @@ -504,6 +504,12 @@ protected:
@@ -175,44 +196,44 @@ index 6bf3818..d31691d 100644
      Mutex mLock;
  
      Condition mReaderIsAliveCondition;
-@@ -711,11 +717,35 @@ public:
- 
-     inline int32_t getRelativeX() const { return mRelX; }
-     inline int32_t getRelativeY() const { return mRelY; }
--
-+    inline float getRelAbsX(float x) const {
-+		float relX = (mMaxX - mMinX) * (float)mAbsX;
-+		ALOGV(" ----= x:%d", mAbsX);
-+		return relX/65535.0 - x; 
-+	}
-+    inline int32_t getRelAbsY(float y) const { 
-+		float relY = (mMaxY - mMinY) * (float)mAbsY;
-+		ALOGV(" ----= y:%d", mAbsY);
-+		return relY/65535.0 - y; 
-+	}
-+
-+	inline void setBounds(float minX, float minY, float maxX, float maxY) {
-+		mMinX = minX;
-+		mMaxX = maxX;
-+		mMinY = minY;
-+		mMaxY = maxY;
-+	}
- private:
-     int32_t mRelX;
-     int32_t mRelY;
- 
-+    int32_t mAbsX;
-+    int32_t mAbsY;
-+
-+	float mMinX;
-+	float mMinY;
-+	float mMaxX;
-+	float mMaxY;
-+
+@@ -719,6 +725,36 @@ private:
      void clearRelativeAxes();
  };
  
-@@ -1178,7 +1208,7 @@ private:
++class CursorAbsoluteMotionAccumulator {
++public:
++    CursorAbsoluteMotionAccumulator();
++    void reset(InputDevice* device);
++
++    void process(const RawEvent* rawEvent);
++    void finishSync();
++
++    inline float getRelAbsX(float x) const {
++        float relX = mDeltaX * (float)mAbsX;
++        return relX/65535.0 - x; 
++    }
++    inline int32_t getRelAbsY(float y) const { 
++        float relY = mDeltaY * (float)mAbsY;
++        return relY/65535.0 - y; 
++    }
++
++    inline void setBounds(float minX, float minY, float maxX, float maxY) {
++        mDeltaX = maxX - minX;
++        mDeltaY = maxY - minY;
++    }
++private:
++    int32_t mAbsX;
++    int32_t mAbsY;
++
++    float mDeltaX;
++    float mDeltaY;
++
++};
++
+ 
+ /* Keeps track of cursor scrolling motions. */
+ 
+@@ -1178,7 +1214,7 @@ private:
  
  class CursorInputMapper : public InputMapper {
  public:
@@ -221,11 +242,17 @@ index 6bf3818..d31691d 100644
      virtual ~CursorInputMapper();
  
      virtual uint32_t getSources();
-@@ -1206,6 +1236,7 @@ private:
+@@ -1206,11 +1242,13 @@ private:
          Mode mode;
          bool hasAssociatedDisplay;
          bool orientationAware;
-+		bool absMouse;
++        bool absMouse;
      } mParameters;
  
      CursorButtonAccumulator mCursorButtonAccumulator;
+     CursorMotionAccumulator mCursorMotionAccumulator;
+     CursorScrollAccumulator mCursorScrollAccumulator;
++    CursorAbsoluteMotionAccumulator mCursorAbsoluteMotionAccumulator;
+ 
+     int32_t mSource;
+     float mXScale;
