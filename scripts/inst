@@ -43,7 +43,10 @@ file_copy vboxsf.sh /system/bin/ root.root 0755
 
 cd ..
 
-
 if [ -f mount.vboxsf ]; then
 	file_copy mount.vboxsf /system/bin/ root.root 0755
+fi
+
+if [ -f libinputflinger.so ]; then
+	file_copy libinputflinger.so /system/lib/ root.root 0755
 fi

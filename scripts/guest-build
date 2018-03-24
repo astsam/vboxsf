@@ -30,13 +30,31 @@ create_tar_gz() {
 	guest_name=`basename $1`
 	archive_name=$work_dir/$guest_name-$2
 
-	echo -e "vboxsf.ko\nvboxvideo.ko\nvboxguest.ko\n$script_dir/../src/init.vboxsf.rc\n$script_dir/../src/vboxsf.sh\n$script_dir/../scripts/inst" | \
-		cpio -o --quiet --owner=0:0 --no-absolute-filenames -O $archive_name.tar -H tar 
-
-	if [ -f $archive_name.tar ]; then 
-		rm -f  $archive_name.tar.gz 2> /dev/null
-		gzip -9 $archive_name.tar
+	temp_dir=`mktemp -d -p "$work_dir"`
+	if [[ ! "$temp_dir" || ! -d "$temp_dir" ]]; then
+		echo "Could not create temp dir"
+  		return
 	fi
+	cp {vboxsf.ko,vboxvideo.ko,vboxguest.ko} $temp_dir
+	mkdir $temp_dir/src
+	mkdir $temp_dir/scripts
+	cp $script_dir/../src/vboxsf.sh $temp_dir/src
+	cp $script_dir/../src/init.vboxsf.rc $temp_dir/src
+	cp $script_dir/inst $temp_dir/scripts
+	if [ -f $android_product_dir/$2/system/lib/libinputflinger.so ]; then
+		cp $android_product_dir/$2/system/lib/libinputflinger.so $temp_dir
+	fi
+	if [ -f $android_product_dir/$2/system/bin/mount.vboxsf ]; then
+		cp $android_product_dir/$2/system/bin/mount.vboxsf	$temp_dir
+	fi
+#	echo -e "vboxsf.ko\nvboxvideo.ko\nvboxguest.ko\n$script_dir/../src/init.vboxsf.rc\n$script_dir/../src/vboxsf.sh\n$script_dir/../scripts/inst" | \
+#		cpio -o --quiet --owner=0:0 --no-absolute-filenames -O $archive_name.tar -H tar 
+	tar c --owner=0 --group=0 -zf $archive_name.tar.gz -C $temp_dir ./
+	rm -rf $temp_dir
+#	if [ -f $archive_name.tar ]; then 
+#		rm -f  $archive_name.tar.gz 2> /dev/null
+#		gzip -9 $archive_name.tar
+#	fi
 
 	# create self extracting archive
 	temp_dir=`mktemp -d -p "$work_dir"`
