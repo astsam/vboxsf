@@ -8,7 +8,7 @@ The `src` directory of this project contains a port of the mount.vboxsf utility 
 3. Some glue to mount shared folders on boot. For marshmallow this can be done by patching the init.rc script. The `vboxsf.sh` script mounts shared folders at the `/mnt/media_rw/vboxsf` directory on a guest.
 
 ## Prerequisits
-1. Download android_x86 sources from http://www.android_x86.org.
+1. Download android_x86 sources from http://www.android-x86.org.
 2. Download VBoxGuestAdditions.iso from https://download.virtualbox.org/virtualbox/. If VirtualBox is installed the iso image is located in the /usr/share/virtualbox directory.
 3. Install 7z package.
 
